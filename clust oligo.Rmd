@@ -1,0 +1,114 @@
+---
+title: "Untitled"
+author: "Daria Dodon"
+date: "2024-09-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(here)
+library(enrichR)
+library(clusterProfiler)
+library(readxl)   
+library(tibble)   
+library(janitor) 
+library(org.Mm.eg.db) 
+library(enrichplot)
+library(RColorBrewer)
+library(ggplot2)
+```
+```
+
+
+
+```{r}
+ensembl <- useEnsembl(biomart = "ensembl", 
+                   dataset = "mmusculus_gene_ensembl", 
+                   mirror = "useast")
+```
+
+```{r, include=FALSE}
+
+data<- read.csv("DE_1m_oligodendrocytes.csv", row.names = 1)
+```
+
+```{r}
+genes_entrez <- getBM(filters = "external_gene_name",
+             attributes = c("entrezgene_id", "external_gene_name"),
+             values = rownames(data),
+             mart = ensembl)
+```
+
+```{r, include=FALSE}
+
+data <- data %>% tibble::rownames_to_column("genes")
+```
+
+```{r, include=FALSE}
+
+filtered_data <- data %>%
+  filter(!grepl("^mt-", genes))
+```
+
+```{r, include=FALSE}
+
+data_1 <- filtered_data %>% 
+  mutate(ranking = (sign(avg_log2FC) * (-log10(p_val_adj)))) %>% 
+  arrange(desc(ranking))
+```
+
+```{r, include=FALSE}
+
+
+de_results <- subset(data_1, abs(pct.1 - pct.2) > 0.2)
+
+```
+
+```{r, include=FALSE}
+
+
+de_results <- dplyr::left_join(de_results, genes_entrez, by = c("genes" = "external_gene_name"))
+```
+
+```{r, include=FALSE}
+
+de_results %>% janitor::get_dupes("entrezgene_id")
+```
+
+```{r, include=FALSE}
+
+de_results <- de_results %>%
+  tidyr::drop_na() %>%
+  dplyr::distinct(entrezgene_id, .keep_all = TRUE)
+```
+
+
+```{r}
+top_genes <- de_results %>%
+  arrange(desc(avg_log2FC)) %>%
+  head(500)
+```
+
+
+```{r}
+genes_list <- top_genes$ranking
+names(genes_list) <- top_genes$entrezgene_id
+genes_list <- sort(genes_list, decreasing = TRUE)
+genes_list <- genes_list[is.finite(genes_list)]
+```
+
+```{r}
+
+gseKEGG(genes_list, organism = "mmu", by = "DOSE", nPerm = 1000)
+```
+
+
+```{r}
+gseWP_res_025 <- gseWP(genes_list, organism = "Mus musculus", by = "DOSE", nPerm = 1000, pvalueCutoff = 0.25)
+
+```

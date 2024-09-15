@@ -1,0 +1,111 @@
+---
+title: "Untitled"
+author: "Daria Dodon"
+date: "2024-09-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+```{r}
+library(here)
+library(enrichR)
+library(clusterProfiler)
+library(readxl)   
+library(tibble)   
+library(janitor) 
+library(org.Mm.eg.db) 
+library(enrichplot)
+library(RColorBrewer)
+library(ggplot2)
+```
+```
+
+###Microglia
+
+```{r}
+ensembl <- useEnsembl(biomart = "ensembl", 
+                   dataset = "mmusculus_gene_ensembl", 
+                   mirror = "useast")
+```
+
+```{r, include=FALSE}
+data_n<- read.csv("DE_1m_microglia.csv", row.names = 1)
+```
+
+```{r, include=FALSE}
+
+genes_entrez_1 <- getBM(filters = "external_gene_name",
+             attributes = c("entrezgene_id", "external_gene_name"),
+             values = rownames(data_n),
+             mart = ensembl)
+
+```
+
+```{r, include=FALSE}
+
+data_n <- data_n %>% tibble::rownames_to_column("genes")
+
+
+```
+
+```{r, include=FALSE}
+filtered_data_n <- data_n %>%
+  filter(!grepl("^mt-", genes))
+
+```
+
+```{r, include=FALSE}
+data_1_n <- filtered_data_n %>% 
+  mutate(ranking = (sign(avg_log2FC) * (-log10(p_val_adj)))) %>% 
+  arrange(desc(ranking))
+```
+
+
+```{r, include=FALSE}
+de_results_n <- subset(data_1_n, abs(pct.1 - pct.2) > 0.2)
+```
+
+```{r, include=FALSE}
+de_results_n <- dplyr::left_join(de_results_n, genes_entrez_1, by = c("genes" = "external_gene_name"))
+```
+
+```{r, include=FALSE}
+de_results_n %>% janitor::get_dupes("entrezgene_id")
+```
+
+```{r, include=FALSE}
+
+de_results_n <- de_results_n %>%
+  tidyr::drop_na() %>%
+  dplyr::distinct(entrezgene_id, .keep_all = TRUE)
+
+```
+
+```{r}
+top_genes_1 <- de_results_n %>%
+  arrange(desc(avg_log2FC)) %>%
+  head(500)
+```
+
+
+```{r}
+genes_list_1 <- top_genes_1$ranking
+names(genes_list_1) <- top_genes_1$entrezgene_id
+genes_list_1 <- sort(genes_list_1, decreasing = TRUE)
+genes_list_1 <- genes_list_1[is.finite(genes_list_1)]
+```
+
+
+```{r}
+gseKEGG(genes_list_1, organism = "mmu", by = "DOSE", nPerm = 1000)
+```
+
+```{r}
+gseWP_res_025 <- gseWP(genes_list_1, organism = "Mus musculus", by = "DOSE", nPerm = 1000, pvalueCutoff = 0.25)
+
+```
